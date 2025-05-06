@@ -1,16 +1,27 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import Editor from "@monaco-editor/react";
 import antlr4 from "antlr4";
 import CLexer from "./antlr/CLexer";
 import CParser from "./antlr/CParser";
 import { BailErrorStrategy } from "antlr4";
-import { FaEdit, FaTrashAlt } from "react-icons/fa";
+import { FaEdit, FaTrashAlt, FaDownload } from "react-icons/fa";
 
 function App() {
   const [files, setFiles] = useState([{ name: "untitled.c", content: "" }]);
   const [activeIndex, setActiveIndex] = useState(0);
   const [warnings, setWarnings] = useState([]);
   const editorRef = useRef(null);
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+        e.preventDefault();
+        handleDownload();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [files, activeIndex]);
 
   const handleFileUpload = (e) => {
     const file = e.target.files?.[0];
@@ -47,6 +58,16 @@ function App() {
     const updated = files.filter((_, i) => i !== index);
     setFiles(updated);
     setActiveIndex(index === activeIndex ? 0 : Math.max(0, activeIndex - 1));
+  };
+
+  const handleDownload = () => {
+    const file = files[activeIndex];
+    const blob = new Blob([file.content], { type: "text/plain" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = file.name;
+    link.click();
+    URL.revokeObjectURL(link.href);
   };
 
   const parseCCode = (code) => {
@@ -122,7 +143,7 @@ function App() {
         </div>
 
         <div className="w-1/3 p-4 bg-gray-800 overflow-auto">
-          <div className="mb-4 flex gap-2">
+          <div className="mb-4 flex gap-2 flex-wrap">
             <button
               onClick={handleNewFile}
               className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
@@ -138,6 +159,14 @@ function App() {
                 onChange={handleFileUpload}
               />
             </label>
+            <button
+              onClick={handleDownload}
+              className="bg-indigo-500 text-white px-4 py-2 rounded hover:bg-indigo-600"
+              title="Download (Ctrl+S)"
+            >
+              <FaDownload className="inline mr-2" />
+              Download
+            </button>
           </div>
 
           <div className="space-y-2 mb-4">
