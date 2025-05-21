@@ -4,9 +4,18 @@ import antlr4 from "antlr4";
 import CLexer from "./antlr/CLexer";
 import CParser from "./antlr/CParser";
 import { BailErrorStrategy } from "antlr4";
-import { FaEdit, FaTrashAlt, FaDownload } from "react-icons/fa";
-import Tree from "react-d3-tree";
+import {
+  FaEdit,
+  FaTrashAlt,
+  FaDownload,
+  FaPlus,
+  FaUpload,
+  FaSitemap,
+  FaExclamationTriangle,
+  FaCheckCircle,
+} from "react-icons/fa";
 import cKeywords from "./cKeywords.json";
+import ASTViewer from "./ASTViewer";
 
 // 在 module 頂層設置 flag，確保全程唯一
 let cCompletionRegistered = false;
@@ -84,10 +93,20 @@ int main() {
     }
     const file = e.target.files?.[0];
     if (file && file.name.endsWith(".c")) {
+      // 檢查名稱是否重複，若重複則自動加編號
+      let base = file.name.replace(/\.c$/, "");
+      let ext = ".c";
+      let name = file.name;
+      let counter = 1;
+      const existingNames = files.map((f) => f.name);
+      while (existingNames.includes(name)) {
+        name = `${base} (${counter})${ext}`;
+        counter++;
+      }
       const reader = new FileReader();
       reader.onload = (event) => {
         const content = event.target.result;
-        setFiles((prev) => [...prev, { name: file.name, content }]);
+        setFiles((prev) => [...prev, { name, content }]);
         setWarnings((prev) => [...prev, []]);
         setMarkers((prev) => [...prev, []]);
         setActiveIndex(files.length);
@@ -103,8 +122,15 @@ int main() {
       alert("You can only edit up to 8 files at the same time.");
       return;
     }
-    const newName = `untitled-${files.length + 1}.c`;
-    setFiles((prev) => [...prev, { name: newName, content: defaultContent }]);
+    // 產生不重複的 untitled 名稱
+    let idx = files.length + 1;
+    let name = `untitled-${idx}.c`;
+    const existingNames = files.map((f) => f.name);
+    while (existingNames.includes(name)) {
+      idx++;
+      name = `untitled-${idx}.c`;
+    }
+    setFiles((prev) => [...prev, { name, content: defaultContent }]);
     setWarnings((prev) => [...prev, []]);
     setMarkers((prev) => [...prev, []]);
     setActiveIndex(files.length);
@@ -226,19 +252,19 @@ int main() {
   }, [activeIndex, markers]);
 
   return (
-    <div className="h-screen flex flex-col bg-gray-900 text-white">
-      <header className="bg-gray-800 text-white text-xl font-bold p-4">
-        Simple C Editor
+    <div className="h-screen flex flex-col text-base-content">
+      <header className="navbar bg-base-100 p-4 shadow">
+        <a className="btn btn-ghost text-xl">Simple C Editor</a>
       </header>
 
       <div className="flex flex-1 overflow-hidden">
-        <div className="w-2/3 border-r border-gray-700">
+        <div className="w-2/3 border-r border-base-300">
           <Editor
             height="100%"
             language="c"
             value={files[activeIndex]?.content || ""}
             theme="vs-dark"
-            onMount={handleEditorMount} // 修改這裡
+            onMount={handleEditorMount}
             onChange={(value) => updateContent(value || "")}
             options={{
               fontSize: 24,
@@ -248,150 +274,101 @@ int main() {
           />
         </div>
 
-        <div className="w-1/3 p-4 bg-gray-800 overflow-auto text-lg flex flex-col">
-          <div className="mb-4 flex gap-2 flex-wrap">
-            <button
-              onClick={handleNewFile}
-              className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
-            >
-              New C File
-            </button>
-            <label className="bg-blue-500 text-white px-4 py-2 rounded cursor-pointer hover:bg-blue-600">
-              Upload C File
-              <input
-                type="file"
-                accept=".c"
-                className="hidden"
-                onChange={handleFileUpload}
-              />
-            </label>
-            <button
-              onClick={handleDownload}
-              className="bg-indigo-500 text-white px-4 py-2 rounded hover:bg-indigo-600"
-              title="Download (Ctrl+S)"
-            >
-              <FaDownload className="inline mr-2" />
-              Download
-            </button>
-          </div>
-
-          <div className="space-y-2 mb-4">
-            {files.map((file, idx) => (
-              <div key={idx} className="flex items-center gap-2">
-                <button
-                  onClick={() => setActiveIndex(idx)}
-                  className={`flex-1 text-left px-4 py-2 rounded ${
-                    idx === activeIndex
-                      ? "bg-blue-600 text-white"
-                      : "bg-gray-700 hover:bg-gray-600 text-white"
-                  }`}
-                >
-                  {file.name}
-                </button>
-                <button
-                  onClick={() => handleRenameFile(idx)}
-                  className="p-1 text-yellow-400 hover:text-yellow-300"
-                  title="Rename"
-                >
-                  <FaEdit />
-                </button>
-                <button
-                  onClick={() => handleDeleteFile(idx)}
-                  className="p-1 text-red-500 hover:text-red-400"
-                  title="Delete"
-                >
-                  <FaTrashAlt />
-                </button>
-              </div>
-            ))}
-          </div>
-
-          <div className="bg-base-100 border-base-300 collapse border rounded-lg mb-4">
-            <input type="checkbox" className="peer" />
-            <div className="collapse-title text-lg font-medium">AST Viewer</div>
-            <div className="collapse-content ">
-              <div
-                className="p-2 rounded text-sm mb-4"
-                style={{
-                  height: 500,
-                  width: "100%",
-                  background: "#f3f4f6", // 更亮的背景
-                  border: "2px solid #6366f1",
-                  overflow: "auto",
-                }}
+        <div className="w-1/3 p-4 bg-base-300 overflow-hidden text-lg flex flex-col h-full">
+          {/* 上半部：按鈕與檔案列表 */}
+          <div className="flex-shrink-0">
+            <div className="mb-4 flex gap-2 flex-wrap">
+              <button onClick={handleNewFile} className="btn btn-primary">
+                <FaPlus className="inline mr-2" />
+                New C File
+              </button>
+              <label className="btn btn-primary">
+                <FaUpload className="inline mr-2" />
+                Upload C File
+                <input
+                  type="file"
+                  accept=".c"
+                  className="hidden"
+                  onChange={handleFileUpload}
+                />
+              </label>
+              <button
+                onClick={handleDownload}
+                className="btn btn-primary"
+                title="Download (Ctrl+S)"
               >
-                {astData ? (
-                  <div style={{ width: "100%", height: "100%" }}>
-                    <Tree
-                      data={astData}
-                      orientation="vertical"
-                      pathFunc="elbow"
-                      translate={{ x: 250, y: 80 }}
-                      nodeSize={{ x: 200, y: 80 }}
-                      styles={{
-                        nodes: {
-                          node: {
-                            circle: {
-                              fill: "#facc15",
-                              stroke: "#f59e42",
-                              strokeWidth: 3,
-                              r: 18,
-                              filter: "drop-shadow(0 2px 6px #0008)",
-                            },
-                            name: {
-                              fontSize: "1.25rem",
-                              fill: "#18181b",
-                              fontWeight: "bold",
-                              textShadow: "0 1px 2px #fff8",
-                            },
-                            attributes: {
-                              fontSize: "1rem",
-                              fill: "#f59e42",
-                            },
-                          },
-                          leafNode: {
-                            circle: {
-                              fill: "#38bdf8",
-                              stroke: "#0ea5e9",
-                              strokeWidth: 3,
-                              r: 16,
-                              filter: "drop-shadow(0 2px 6px #0008)",
-                            },
-                            name: {
-                              fontSize: "1.1rem",
-                              fill: "#18181b",
-                              fontWeight: "bold",
-                              textShadow: "0 1px 2px #fff8",
-                            },
-                            attributes: {
-                              fontSize: "0.95rem",
-                              fill: "#0ea5e9",
-                            },
-                          },
-                        },
-                        links: {
-                          stroke: "#facc15",
-                          strokeWidth: 3,
-                        },
+                <FaDownload className="inline mr-2" />
+                Download
+              </button>
+            </div>
+            <div className="space-y-2 mb-4">
+              {files.map((file, idx) => (
+                <div key={idx} className="flex items-center gap-2">
+                  <div
+                    className={`flex flex-row items-center px-4 py-2 rounded cursor-pointer flex-1 ${
+                      idx === activeIndex
+                        ? "bg-primary text-primary-content border border-primary"
+                        : "bg-base-300 hover:bg-base-200 text-base-content"
+                    }`}
+                    onClick={() => setActiveIndex(idx)}
+                  >
+                    <span className="flex-1 text-left">{file.name}</span>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleRenameFile(idx);
                       }}
-                    />
+                      className="p-1 text-[#fbbf24] hover:text-[#fde68a] ml-2"
+                      title="Rename"
+                    >
+                      <FaEdit />
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteFile(idx);
+                      }}
+                      className="p-1 text-[#ef4444] hover:text-[#f87171] ml-1"
+                      title="Delete"
+                    >
+                      <FaTrashAlt />
+                    </button>
                   </div>
-                ) : (
-                  <p className="text-xs mt-1">No AST generated.</p>
-                )}
-              </div>
+                </div>
+              ))}
             </div>
           </div>
 
-          <div className="bg-yellow-900 border border-yellow-700 text-yellow-200 p-2 rounded text-sm">
-            <strong>Warnings:</strong>
-            <ul className="list-disc pl-5 mt-1">
+          {/* 下半部：AST viewer 與 warnings，AST viewer 填滿，warnings 固定底部 */}
+          <div className="flex flex-col flex-1 min-h-0">
+            <div className="flex-1 min-h-0 overflow-auto">
+              <ASTViewer astData={astData} />
+            </div>
+            <div
+              role="alert"
+              className="alert alert-soft mt-4 flex-shrink-0 text-xl font-semibold"
+            >
               {!warnings[activeIndex] || warnings[activeIndex].length === 0 ? (
-                <li>No syntax warnings.</li>
+                <div className="flex items-center gap-2 mb-1 text-success text-xl font-semibold">
+                  <FaCheckCircle className="text-success" size={20} />
+                  <span>No syntax errors.</span>
+                </div>
               ) : (
-                warnings[activeIndex].map((warn, i) => <li key={i}>{warn}</li>)
+                <>
+                  <div className="flex items-center gap-2 mb-1 text-xl text-warning font-semibold">
+                    <FaExclamationTriangle className="text-warning" size={20} />
+                    <strong>Warnings:</strong>
+                  </div>
+                  <ul className="list-disc pl-5 mt-1 text-lg">
+                    {warnings[activeIndex].map((warn, i) => (
+                      <li className="text-warning" key={i}>
+                        {warn}
+                      </li>
+                    ))}
+                  </ul>
+                </>
               )}
-            </ul>
+            </div>
           </div>
         </div>
       </div>
