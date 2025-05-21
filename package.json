@@ -16,6 +16,7 @@
     "antlr4ts": "^0.5.0-alpha.4",
     "daisyui": "^5.0.35",
     "firebase": "^11.6.1",
+    "jszip": "^3.10.1",
     "monaco-editor": "^0.52.2",
     "react": "^19.0.0",
     "react-d3-tree": "^3.6.6",

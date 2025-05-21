@@ -13,9 +13,11 @@ import {
   FaSitemap,
   FaExclamationTriangle,
   FaCheckCircle,
+  FaFileArchive,
 } from "react-icons/fa";
 import cKeywords from "./cKeywords.json";
 import ASTViewer from "./ASTViewer";
+import JSZip from "jszip";
 
 // 在 module 頂層設置 flag，確保全程唯一
 let cCompletionRegistered = false;
@@ -42,8 +44,7 @@ int main() {
   useEffect(() => {
     // 初始時就解析 AST 與警告
     parseCCode(files[activeIndex]?.content || "", activeIndex);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // 僅在初始時執行
+  }, [files, activeIndex]);
 
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -55,6 +56,10 @@ int main() {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   });
+
+  useEffect(() => {
+    parseCCode(files[activeIndex]?.content || "", activeIndex);
+  }, [activeIndex]);
 
   const handleEditorMount = (editor, monaco) => {
     editorRef.current = editor;
@@ -166,6 +171,19 @@ int main() {
     URL.revokeObjectURL(link.href);
   };
 
+  const handleDownloadAll = async () => {
+    const zip = new JSZip();
+    for (const file of files) {
+      zip.file(file.name, file.content);
+    }
+    const content = await zip.generateAsync({ type: "blob" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(content);
+    link.download = "all_files.zip";
+    link.click();
+    URL.revokeObjectURL(link.href);
+  };
+
   const buildAstTree = (node, parser) => {
     if (!node) return null;
     const name = parser.ruleNames[node.ruleIndex] || node.getText();
@@ -252,9 +270,18 @@ int main() {
   }, [activeIndex, markers]);
 
   return (
-    <div className="h-screen flex flex-col text-base-content">
+    <div className="h-screen flex flex-col">
       <header className="navbar bg-base-100 p-4 shadow">
         <a className="btn btn-ghost text-xl">Simple C Editor</a>
+        <div className="ml-auto">
+          <button
+            className="btn"
+            onClick={() => document.getElementById("my_modal").showModal()}
+          >
+            <FaSitemap className="inline-block mr-2" />
+            Site Guide
+          </button>
+        </div>
       </header>
 
       <div className="flex flex-1 overflow-hidden">
@@ -278,12 +305,12 @@ int main() {
           {/* 上半部：按鈕與檔案列表 */}
           <div className="flex-shrink-0">
             <div className="mb-4 flex gap-2 flex-wrap">
-              <button onClick={handleNewFile} className="btn btn-primary">
-                <FaPlus className="inline mr-2" />
+              <button onClick={handleNewFile} className="btn btn-info">
+                <FaPlus className="inline mr-2" size={20} />
                 New C File
               </button>
-              <label className="btn btn-primary">
-                <FaUpload className="inline mr-2" />
+              <label className="btn btn-info">
+                <FaUpload className="inline mr-2" size={20} />
                 Upload C File
                 <input
                   type="file"
@@ -294,11 +321,15 @@ int main() {
               </label>
               <button
                 onClick={handleDownload}
-                className="btn btn-primary"
+                className="btn btn-info"
                 title="Download (Ctrl+S)"
               >
-                <FaDownload className="inline mr-2" />
+                <FaDownload className="inline mr-2" size={20} />
                 Download
+              </button>
+              <button onClick={handleDownloadAll} className="btn btn-info">
+                <FaFileArchive className="inline mr-2" size={20} />
+                Download All
               </button>
             </div>
             <div className="space-y-2 mb-4">
@@ -308,18 +339,41 @@ int main() {
                     className={`flex flex-row items-center px-4 py-2 rounded cursor-pointer flex-1 ${
                       idx === activeIndex
                         ? "bg-primary text-primary-content border border-primary"
-                        : "bg-base-300 hover:bg-base-200 text-base-content"
+                        : "bg-base-300 hover:bg-base-200 text-base-content border border-base-300"
                     }`}
                     onClick={() => setActiveIndex(idx)}
                   >
-                    <span className="flex-1 text-left">{file.name}</span>
+                    <span
+                      className={`flex-1 text-left ${
+                        idx === activeIndex ? "font-bold" : "text-gray-400"
+                      }`}
+                    >
+                      {file.name}
+                    </span>
+                    {warnings[idx] && warnings[idx].length === 0 && (
+                      <span className="ml-2 badge badge-soft badge-success">
+                        No syntax errors
+                      </span>
+                    )}
+                    {warnings[idx] && warnings[idx].length > 0 && (
+                      <span className="ml-2 badge badge-soft badge-warning">
+                        Warning
+                        {warnings[idx].length > 1
+                          ? `s(${warnings[idx].length})`
+                          : ""}
+                        {warnings[idx].length === 1 ? "(1)" : ""}
+                      </span>
+                    )}
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
                         handleRenameFile(idx);
                       }}
-                      className="p-1 text-[#fbbf24] hover:text-[#fde68a] ml-2"
+                      className={`p-1 ml-2 ${
+                        idx === activeIndex ? "text-warning" : "text-gray-400"
+                      }`}
                       title="Rename"
+                      style={{ cursor: "pointer" }}
                     >
                       <FaEdit />
                     </button>
@@ -328,8 +382,11 @@ int main() {
                         e.stopPropagation();
                         handleDeleteFile(idx);
                       }}
-                      className="p-1 text-[#ef4444] hover:text-[#f87171] ml-1"
+                      className={`p-1 ml-1 ${
+                        idx === activeIndex ? "text-error" : "text-gray-400"
+                      }`}
                       title="Delete"
+                      style={{ cursor: "pointer" }}
                     >
                       <FaTrashAlt />
                     </button>
@@ -357,7 +414,12 @@ int main() {
                 <>
                   <div className="flex items-center gap-2 mb-1 text-xl text-warning font-semibold">
                     <FaExclamationTriangle className="text-warning" size={20} />
-                    <strong>Warnings:</strong>
+                    <strong>
+                      Warnings
+                      {warnings[activeIndex] && warnings[activeIndex].length > 0
+                        ? `(${warnings[activeIndex].length})`
+                        : ""}
+                    </strong>
                   </div>
                   <ul className="list-disc pl-5 mt-1 text-lg">
                     {warnings[activeIndex].map((warn, i) => (
@@ -372,6 +434,45 @@ int main() {
           </div>
         </div>
       </div>
+      <dialog id="my_modal" className="modal">
+        <div className="modal-box">
+          <h2 className="font-bold   text-lg">
+            <FaSitemap className="inline-block mr-2" size={24} />
+            Website Features
+          </h2>
+          <div className="py-4 space-y-2 text-base">
+            <ul className="list-disc pl-5 space-y-2">
+              <li>
+                <strong>File Management:</strong> Create, upload, rename, and
+                delete up to 8 C files. Download your code anytime.
+              </li>
+              <li>
+                <strong>Code Editor:</strong> Enjoy syntax highlighting, keyword
+                auto-completion, and error markers powered by Monaco Editor.
+              </li>
+              <li>
+                <strong>Syntax Checking:</strong> Real-time syntax error and
+                warning display for each file.
+              </li>
+              <li>
+                <strong>AST Viewer:</strong> Visualize the Abstract Syntax Tree
+                (AST) of your C code in the right panel.
+              </li>
+              <li>
+                <strong>Keyboard Shortcut:</strong> Press{" "}
+                <strong>Ctrl+S</strong> (or <strong>Cmd+S</strong> on Mac) to
+                quickly download the current file.
+              </li>
+            </ul>
+            <div className="mt-4 text-sm text-gray-500">
+              Use the navigation bar and buttons above to access all features.
+            </div>
+          </div>
+        </div>
+        <form method="dialog" className="modal-backdrop">
+          <button>close</button>
+        </form>
+      </dialog>
     </div>
   );
 }
