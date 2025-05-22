@@ -14,6 +14,7 @@ import {
   FaExclamationTriangle,
   FaCheckCircle,
   FaFileArchive,
+  FaBug,
 } from "react-icons/fa";
 import cKeywords from "./cKeywords.json";
 import ASTViewer from "./ASTViewer";
@@ -31,7 +32,7 @@ int main() {
 }
 `;
   const [files, setFiles] = useState([
-    { name: "untitled.c", content: defaultContent },
+    { name: "untitled.c", content: defaultContent, warningsCount: 0 },
   ]);
   const [activeIndex, setActiveIndex] = useState(0);
   // 新增一個 warnings 狀態，改為陣列，每個檔案一組 warnings
@@ -60,6 +61,16 @@ int main() {
   useEffect(() => {
     parseCCode(files[activeIndex]?.content || "", activeIndex);
   }, [activeIndex]);
+
+  useEffect(() => {
+    handleLoad();
+  }, []);
+
+  useEffect(() => {
+    if (!isAllDefaultFiles(files, defaultContent)) {
+      handleSave();
+    }
+  }, [files]);
 
   const handleEditorMount = (editor, monaco) => {
     editorRef.current = editor;
@@ -199,7 +210,7 @@ int main() {
     return { name, children };
   };
 
-  const parseCCode = (code, idx) => {
+  const parseCCode = (code) => {
     const chars = new antlr4.InputStream(code);
     const lexer = new CLexer(chars);
     const tokens = new antlr4.CommonTokenStream(lexer);
@@ -229,19 +240,37 @@ int main() {
       newWarnings.push(`Parser exception: ${e.message}`);
       setAstData(null);
     }
-    // 更新對應檔案的 warnings 和 markers
+
+    return { markersArr, newWarnings };
+  };
+
+  useEffect(() => {
+    const currentFile = files[activeIndex];
+    if (!currentFile) return;
+
+    const { markersArr, newWarnings } = parseCCode(currentFile.content);
+
     setWarnings((prev) => {
       const arr = [...prev];
-      arr[idx] = newWarnings;
+      arr[activeIndex] = newWarnings;
       return arr;
     });
+
     setMarkers((prev) => {
       const arr = [...prev];
-      arr[idx] = markersArr;
+      arr[activeIndex] = markersArr;
       return arr;
     });
-    return markersArr;
-  };
+
+    setFiles((prev) => {
+      const updatedFiles = [...prev];
+      updatedFiles[activeIndex] = {
+        ...updatedFiles[activeIndex],
+        warningsCount: newWarnings.length,
+      };
+      return updatedFiles;
+    });
+  }, [activeIndex, files[activeIndex]?.content]);
 
   const updateContent = (newValue) => {
     if (!files[activeIndex]) return;
@@ -269,6 +298,30 @@ int main() {
     }
   }, [activeIndex, markers]);
 
+  function handleLoad() {
+    const storedFiles = localStorage.getItem("myFiles");
+    if (storedFiles) {
+      setFiles(JSON.parse(storedFiles));
+    } else {
+      setFiles([
+        { name: "untitled.c", content: defaultContent, warningsCount: 0 },
+      ]);
+    }
+    console.log("Loaded from localStorage");
+  }
+
+  function handleSave() {
+    localStorage.setItem("myFiles", JSON.stringify(files));
+    console.log("Saved to localStorage");
+  }
+
+  function isAllDefaultFiles(files, defaultContent) {
+    if (files.length !== 1) return false;
+    return (
+      files[0].name === "untitled.c" && files[0].content === defaultContent
+    );
+  }
+
   return (
     <div className="h-screen flex flex-col">
       <header className="navbar bg-base-100 p-4 shadow">
@@ -280,6 +333,13 @@ int main() {
           >
             <FaSitemap className="inline-block mr-2" />
             Site Guide
+          </button>
+          <button
+            className="btn ml-2"
+            onClick={() => document.getElementById("debug_modal").showModal()}
+          >
+            <FaBug className="inline-block mr-2" />
+            Debug
           </button>
         </div>
       </header>
@@ -350,18 +410,14 @@ int main() {
                     >
                       {file.name}
                     </span>
-                    {warnings[idx] && warnings[idx].length === 0 && (
+                    {file.warningsCount === 0 && (
                       <span className="ml-2 badge badge-soft badge-success">
                         No syntax errors
                       </span>
                     )}
-                    {warnings[idx] && warnings[idx].length > 0 && (
+                    {file.warningsCount > 0 && (
                       <span className="ml-2 badge badge-soft badge-warning">
-                        Warning
-                        {warnings[idx].length > 1
-                          ? `s(${warnings[idx].length})`
-                          : ""}
-                        {warnings[idx].length === 1 ? "(1)" : ""}
+                        Warnings: {file.warningsCount}
                       </span>
                     )}
                     <button
@@ -435,42 +491,77 @@ int main() {
         </div>
       </div>
       <dialog id="my_modal" className="modal">
-        <div className="modal-box">
-          <h2 className="font-bold   text-lg">
+        <div className="modal-box max-w-2xl">
+          <h2 className="font-bold text-2xl mb-4">
             <FaSitemap className="inline-block mr-2" size={24} />
             Website Features
           </h2>
-          <div className="py-4 space-y-2 text-base">
-            <ul className="list-disc pl-5 space-y-2">
+          <div className="py-4 space-y-4 text-base leading-relaxed">
+            <ul className="list-disc pl-6 space-y-3">
               <li>
-                <strong>File Management:</strong> Create, upload, rename, and
-                delete up to 8 C files. Download your code anytime.
+                <strong>File Management:</strong> Create, upload, rename,
+                delete, and manage up to 8 C files simultaneously. Download
+                individual files or all files as a ZIP archive.
               </li>
               <li>
-                <strong>Code Editor:</strong> Enjoy syntax highlighting, keyword
-                auto-completion, and error markers powered by Monaco Editor.
+                <strong>Code Editor:</strong> Leverage Monaco Editor with syntax
+                highlighting, keyword auto-completion, and real-time error
+                markers.
               </li>
               <li>
-                <strong>Syntax Checking:</strong> Real-time syntax error and
-                warning display for each file.
+                <strong>Syntax Checking:</strong> Automatically detect and
+                display syntax errors and warnings for each file.
               </li>
               <li>
                 <strong>AST Viewer:</strong> Visualize the Abstract Syntax Tree
                 (AST) of your C code in the right panel.
               </li>
               <li>
-                <strong>Keyboard Shortcut:</strong> Press{" "}
-                <strong>Ctrl+S</strong> (or <strong>Cmd+S</strong> on Mac) to
-                quickly download the current file.
+                <strong>Keyboard Shortcuts:</strong> Use <strong>Ctrl+S</strong>{" "}
+                (or <strong>Cmd+S</strong> on Mac) to quickly download the
+                current file.
+              </li>
+              <li>
+                <strong>Local Storage:</strong> Automatically save and load your
+                files from local storage for persistent editing sessions.
+              </li>
+              <li>
+                <strong>Debug Tools:</strong> Access debug tools to manually
+                save or load files from local storage and view stored data.
               </li>
             </ul>
-            <div className="mt-4 text-sm text-gray-500">
+            <div className="mt-6 text-sm text-gray-500">
               Use the navigation bar and buttons above to access all features.
             </div>
           </div>
         </div>
         <form method="dialog" className="modal-backdrop">
-          <button>close</button>
+          <button>Close</button>
+        </form>
+      </dialog>
+      <dialog id="debug_modal" className="modal">
+        <div className="modal-box">
+          <h2 className="font-bold text-lg">
+            <FaBug className="inline-block mr-2" size={24} />
+            Debug Tools
+          </h2>
+          <div className="py-4 space-y-4 text-base">
+            <div className="flex justify-between">
+              <button className="btn btn-info flex-1 mx-1" onClick={handleSave}>
+                Save to localStorage
+              </button>
+              <button className="btn btn-info flex-1 mx-1" onClick={handleLoad}>
+                Load from localStorage
+              </button>
+            </div>
+            <div className="mt-4">
+              <h3 className="font-bold text-lg">LocalStorage Content:</h3>
+              {localStorage.getItem("myFiles") || "No data in localStorage."}
+            </div>
+          </div>
+        </div>
+        <form method="dialog" className="modal-backdrop">
+          <button>Close</button>
         </form>
       </dialog>
     </div>
