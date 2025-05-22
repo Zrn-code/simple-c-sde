@@ -8,20 +8,10 @@ export default function ASTViewer({ astData }) {
     <div className="bg-base-100 border-base-300 collapse collapse-arrow border rounded-lg mb-4">
       <input type="checkbox" className="peer" />
       <div className="collapse-title text-lg font-medium">AST Viewer</div>
-      <div className="collapse-content ">
-        {/* 移除 toggle UI */}
-        <div
-          className="p-2 rounded text-sm mb-4"
-          style={{
-            height: 500,
-            width: "100%",
-            background: "#f3f4f6",
-            border: "2px solid #6366f1",
-            overflow: "auto",
-          }}
-        >
+      <div className="collapse-content">
+        <div className="p-2 rounded text-sm mb-4 h-[50vh] w-full bg-gray-100 border-2 border-indigo-500 overflow-auto">
           {astData ? (
-            <div style={{ width: "100%", height: "100%" }}>
+            <div className="w-full h-full">
               <Tree
                 data={astData}
                 orientation="vertical"

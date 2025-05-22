@@ -285,7 +285,7 @@ int main() {
       </header>
 
       <div className="flex flex-1 overflow-hidden">
-        <div className="w-2/3 border-r border-base-300">
+        <div className="w-3/5 border-r border-base-300">
           <Editor
             height="100%"
             language="c"
@@ -301,10 +301,10 @@ int main() {
           />
         </div>
 
-        <div className="w-1/3 p-4 bg-base-300 overflow-hidden text-lg flex flex-col h-full">
+        <div className="w-2/5 p-4 bg-base-300 overflow-hidden text-lg flex flex-col h-full">
           {/* 上半部：按鈕與檔案列表 */}
           <div className="flex-shrink-0">
-            <div className="mb-4 flex gap-2 flex-wrap">
+            <div className="mb-4 flex justify-between flex-wrap">
               <button onClick={handleNewFile} className="btn btn-info">
                 <FaPlus className="inline mr-2" size={20} />
                 New C File
