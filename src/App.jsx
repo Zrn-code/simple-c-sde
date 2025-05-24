@@ -15,6 +15,8 @@ import {
   FaCheckCircle,
   FaFileArchive,
   FaBug,
+  FaFolder,
+  FaFolderPlus,
 } from "react-icons/fa";
 import cKeywords from "./cKeywords.json";
 import ASTViewer from "./ASTViewer";
@@ -31,16 +33,66 @@ int main() {
     return 0;
 }
 `;
-  const [files, setFiles] = useState([
-    { name: "untitled.c", content: defaultContent, warningsCount: 0 },
-  ]);
-  const [activeIndex, setActiveIndex] = useState(0);
-  // 新增一個 warnings 狀態，改為陣列，每個檔案一組 warnings
-  const [warnings, setWarnings] = useState([[]]);
-  // 新增一個 markers 狀態，改為陣列，每個檔案一組 markers
-  const [markers, setMarkers] = useState([[]]);
+
+  const createDefaultProject = (name = "Default Project") => ({
+    name,
+    files: [{ name: "untitled.c", content: defaultContent, warningsCount: 0 }],
+    activeIndex: 0,
+    warnings: [[]],
+    markers: [[]],
+  });
+
+  const [projects, setProjects] = useState([createDefaultProject()]);
+  const [activeProjectIndex, setActiveProjectIndex] = useState(0);
   const [astData, setAstData] = useState(null);
   const editorRef = useRef(null);
+
+  // Ensure we always have valid data
+  const currentProject = projects[activeProjectIndex] || createDefaultProject();
+  const files = currentProject.files || [];
+  const activeIndex = currentProject.activeIndex || 0;
+  const warnings = currentProject.warnings || [[]];
+  const markers = currentProject.markers || [[]];
+
+  const updateCurrentProject = (updates) => {
+    setProjects((prev) => {
+      const newProjects = [...prev];
+      if (newProjects[activeProjectIndex]) {
+        newProjects[activeProjectIndex] = {
+          ...newProjects[activeProjectIndex],
+          ...updates,
+        };
+      }
+      return newProjects;
+    });
+  };
+
+  const setFiles = (newFiles) => {
+    if (typeof newFiles === "function") {
+      updateCurrentProject({ files: newFiles(files) });
+    } else {
+      updateCurrentProject({ files: newFiles });
+    }
+  };
+
+  const setActiveIndex = (newIndex) =>
+    updateCurrentProject({ activeIndex: newIndex });
+
+  const setWarnings = (newWarnings) => {
+    if (typeof newWarnings === "function") {
+      updateCurrentProject({ warnings: newWarnings(warnings) });
+    } else {
+      updateCurrentProject({ warnings: newWarnings });
+    }
+  };
+
+  const setMarkers = (newMarkers) => {
+    if (typeof newMarkers === "function") {
+      updateCurrentProject({ markers: newMarkers(markers) });
+    } else {
+      updateCurrentProject({ markers: newMarkers });
+    }
+  };
 
   useEffect(() => {
     // 初始時就解析 AST 與警告
@@ -67,10 +119,10 @@ int main() {
   }, []);
 
   useEffect(() => {
-    if (!isAllDefaultFiles(files, defaultContent)) {
+    if (!isAllDefaultProjects(projects, defaultContent)) {
       handleSave();
     }
-  }, [files]);
+  }, [projects]);
 
   const handleEditorMount = (editor, monaco) => {
     editorRef.current = editor;
@@ -190,7 +242,7 @@ int main() {
     const content = await zip.generateAsync({ type: "blob" });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(content);
-    link.download = "all_files.zip";
+    link.download = `${currentProject.name}.zip`;
     link.click();
     URL.revokeObjectURL(link.href);
   };
@@ -245,6 +297,151 @@ int main() {
   };
 
   useEffect(() => {
+    // Only parse if we have valid files and activeIndex
+    if (files.length > 0 && files[activeIndex]) {
+      parseCCode(files[activeIndex].content || "", activeIndex);
+    }
+  }, [files, activeIndex, activeProjectIndex]);
+
+  const handleNewProject = () => {
+    if (projects.length >= 5) {
+      alert("You can only have up to 5 projects at the same time.");
+      return;
+    }
+    document.getElementById("new_project_modal").showModal();
+  };
+
+  const createProjectFromTemplate = (template) => {
+    let idx = projects.length + 1;
+    let name = template.name || `Project ${idx}`;
+    const existingNames = projects.map((p) => p.name);
+    while (existingNames.includes(name)) {
+      idx++;
+      name = template.name ? `${template.name} ${idx}` : `Project ${idx}`;
+    }
+
+    const newProject = {
+      name,
+      files: template.files.map((file) => ({ ...file, warningsCount: 0 })),
+      activeIndex: 0,
+      warnings: new Array(template.files.length).fill([]),
+      markers: new Array(template.files.length).fill([]),
+    };
+
+    setProjects((prev) => [...prev, newProject]);
+    setActiveProjectIndex(projects.length);
+    document.getElementById("new_project_modal").close();
+  };
+
+  const projectTemplates = [
+    {
+      name: "Hello World",
+      description: "Basic C program with main function",
+      files: [{ name: "main.c", content: defaultContent }],
+    },
+    {
+      name: "Multi-file Project",
+      description: "Project with header and source files",
+      files: [
+        {
+          name: "main.c",
+          content: `#include <stdio.h>\n#include "utils.h"\n\nint main() {\n    printf("Hello from main!\\n");\n    greet("World");\n    return 0;\n}\n`,
+        },
+        {
+          name: "utils.h",
+          content: `#ifndef UTILS_H\n#define UTILS_H\n\nvoid greet(const char* name);\n\n#endif\n`,
+        },
+        {
+          name: "utils.c",
+          content: `#include <stdio.h>\n#include "utils.h"\n\nvoid greet(const char* name) {\n    printf("Hello, %s!\\n", name);\n}\n`,
+        },
+      ],
+    },
+    {
+      name: "Data Structures",
+      description: "Project with common data structure examples",
+      files: [
+        {
+          name: "main.c",
+          content: `#include <stdio.h>\n#include "list.h"\n\nint main() {\n    // Your data structure code here\n    return 0;\n}\n`,
+        },
+        {
+          name: "list.h",
+          content: `#ifndef LIST_H\n#define LIST_H\n\ntypedef struct Node {\n    int data;\n    struct Node* next;\n} Node;\n\nNode* createNode(int data);\nvoid printList(Node* head);\n\n#endif\n`,
+        },
+        {
+          name: "list.c",
+          content: `#include <stdio.h>\n#include <stdlib.h>\n#include "list.h"\n\nNode* createNode(int data) {\n    Node* newNode = malloc(sizeof(Node));\n    newNode->data = data;\n    newNode->next = NULL;\n    return newNode;\n}\n\nvoid printList(Node* head) {\n    Node* current = head;\n    while (current != NULL) {\n        printf("%d -> ", current->data);\n        current = current->next;\n    }\n    printf("NULL\\n");\n}\n`,
+        },
+      ],
+    },
+    {
+      name: "Empty Project",
+      description: "Start with a blank project",
+      files: [{ name: "untitled.c", content: "" }],
+    },
+  ];
+
+  const handleLoad = () => {
+    const storedProjects = localStorage.getItem("myProjects");
+    if (storedProjects) {
+      setProjects(JSON.parse(storedProjects));
+    } else {
+      setProjects([createDefaultProject()]);
+    }
+    console.log("Loaded from localStorage");
+  };
+
+  const handleSave = () => {
+    localStorage.setItem("myProjects", JSON.stringify(projects));
+    console.log("Saved to localStorage");
+  };
+
+  const isAllDefaultProjects = (projects, defaultContent) => {
+    if (projects.length !== 1) return false;
+    const project = projects[0];
+    return (
+      project.name === "Default Project" &&
+      project.files.length === 1 &&
+      project.files[0].name === "untitled.c" &&
+      project.files[0].content === defaultContent
+    );
+  };
+
+  const handleRenameProject = (index) => {
+    const newName = prompt("Enter new project name:", projects[index].name);
+    if (newName && newName.trim()) {
+      setProjects((prev) => {
+        const updated = [...prev];
+        updated[index] = { ...updated[index], name: newName.trim() };
+        return updated;
+      });
+    }
+  };
+
+  const handleDeleteProject = (index) => {
+    if (projects.length <= 1) return alert("At least one project must exist.");
+
+    const projectName = projects[index].name;
+    const firstConfirm = confirm(
+      `Are you sure you want to delete the project "${projectName}"?`
+    );
+
+    if (!firstConfirm) return;
+
+    const secondConfirm = confirm(
+      `This action cannot be undone. Are you absolutely sure you want to delete "${projectName}"?`
+    );
+
+    if (!secondConfirm) return;
+
+    setProjects((prev) => prev.filter((_, i) => i !== index));
+    setActiveProjectIndex(
+      index === activeProjectIndex ? 0 : Math.max(0, activeProjectIndex - 1)
+    );
+  };
+
+  useEffect(() => {
     const currentFile = files[activeIndex];
     if (!currentFile) return;
 
@@ -264,10 +461,12 @@ int main() {
 
     setFiles((prev) => {
       const updatedFiles = [...prev];
-      updatedFiles[activeIndex] = {
-        ...updatedFiles[activeIndex],
-        warningsCount: newWarnings.length,
-      };
+      if (updatedFiles[activeIndex]) {
+        updatedFiles[activeIndex] = {
+          ...updatedFiles[activeIndex],
+          warningsCount: newWarnings.length,
+        };
+      }
       return updatedFiles;
     });
   }, [activeIndex, files[activeIndex]?.content]);
@@ -281,8 +480,14 @@ int main() {
 
     if (editorRef.current) {
       const model = editorRef.current.getModel();
-      const newMarkers = parseCCode(newValue, activeIndex);
-      window.monaco.editor.setModelMarkers(model, "owner", newMarkers);
+      const newMarkers = parseCCode(newValue);
+      if (model) {
+        window.monaco.editor.setModelMarkers(
+          model,
+          "owner",
+          newMarkers.markersArr || []
+        );
+      }
     }
   };
 
@@ -290,57 +495,77 @@ int main() {
   useEffect(() => {
     if (editorRef.current && markers[activeIndex]) {
       const model = editorRef.current.getModel();
-      window.monaco.editor.setModelMarkers(
-        model,
-        "owner",
-        markers[activeIndex]
-      );
+      if (model) {
+        window.monaco.editor.setModelMarkers(
+          model,
+          "owner",
+          markers[activeIndex]
+        );
+      }
     }
   }, [activeIndex, markers]);
-
-  function handleLoad() {
-    const storedFiles = localStorage.getItem("myFiles");
-    if (storedFiles) {
-      setFiles(JSON.parse(storedFiles));
-    } else {
-      setFiles([
-        { name: "untitled.c", content: defaultContent, warningsCount: 0 },
-      ]);
-    }
-    console.log("Loaded from localStorage");
-  }
-
-  function handleSave() {
-    localStorage.setItem("myFiles", JSON.stringify(files));
-    console.log("Saved to localStorage");
-  }
-
-  function isAllDefaultFiles(files, defaultContent) {
-    if (files.length !== 1) return false;
-    return (
-      files[0].name === "untitled.c" && files[0].content === defaultContent
-    );
-  }
 
   return (
     <div className="h-screen flex flex-col">
       <header className="navbar bg-base-100 p-4 shadow">
         <a className="btn btn-ghost text-xl">Simple C Editor</a>
-        <div className="ml-auto">
-          <button
-            className="btn"
-            onClick={() => document.getElementById("my_modal").showModal()}
-          >
-            <FaSitemap className="inline-block mr-2" />
-            Site Guide
-          </button>
-          <button
-            className="btn ml-2"
-            onClick={() => document.getElementById("debug_modal").showModal()}
-          >
-            <FaBug className="inline-block mr-2" />
-            Debug
-          </button>
+
+        {/* Project Switcher */}
+        <div className="flex items-center ml-auto gap-4">
+          <div className="flex items-center gap-2">
+            <FaFolder className="text-primary" size={20} />
+            <select
+              className="select select-bordered"
+              value={activeProjectIndex}
+              onChange={(e) => setActiveProjectIndex(parseInt(e.target.value))}
+            >
+              {projects.map((project, idx) => (
+                <option key={idx} value={idx}>
+                  {project.name}
+                </option>
+              ))}
+            </select>
+            <button
+              className="btn btn-sm btn-primary"
+              onClick={handleNewProject}
+              title="New Project"
+            >
+              <FaFolderPlus size={16} />
+            </button>
+            <button
+              className="btn btn-sm btn-secondary"
+              onClick={() => handleRenameProject(activeProjectIndex)}
+              title="Rename Project"
+            >
+              <FaEdit size={16} />
+            </button>
+            {projects.length > 1 && (
+              <button
+                className="btn btn-sm btn-error"
+                onClick={() => handleDeleteProject(activeProjectIndex)}
+                title="Delete Project"
+              >
+                <FaTrashAlt size={16} />
+              </button>
+            )}
+          </div>
+
+          <div className="flex gap-2">
+            <button
+              className="btn"
+              onClick={() => document.getElementById("my_modal").showModal()}
+            >
+              <FaSitemap className="inline-block mr-2" />
+              Site Guide
+            </button>
+            <button
+              className="btn ml-2"
+              onClick={() => document.getElementById("debug_modal").showModal()}
+            >
+              <FaBug className="inline-block mr-2" />
+              Debug
+            </button>
+          </div>
         </div>
       </header>
 
@@ -389,7 +614,7 @@ int main() {
               </button>
               <button onClick={handleDownloadAll} className="btn btn-info">
                 <FaFileArchive className="inline mr-2" size={20} />
-                Download All
+                Download Project
               </button>
             </div>
             <div className="space-y-2 mb-4">
@@ -499,9 +724,14 @@ int main() {
           <div className="py-4 space-y-4 text-base leading-relaxed">
             <ul className="list-disc pl-6 space-y-3">
               <li>
+                <strong>Project Management:</strong> Create, rename, and delete
+                up to 5 projects. Each project can contain up to 8 C files.
+              </li>
+              <li>
                 <strong>File Management:</strong> Create, upload, rename,
-                delete, and manage up to 8 C files simultaneously. Download
-                individual files or all files as a ZIP archive.
+                delete, and manage up to 8 C files per project. Download
+                individual files or download the entire project as a ZIP
+                archive.
               </li>
               <li>
                 <strong>Code Editor:</strong> Leverage Monaco Editor with syntax
@@ -523,11 +753,12 @@ int main() {
               </li>
               <li>
                 <strong>Local Storage:</strong> Automatically save and load your
-                files from local storage for persistent editing sessions.
+                projects and files from local storage for persistent editing
+                sessions.
               </li>
               <li>
                 <strong>Debug Tools:</strong> Access debug tools to manually
-                save or load files from local storage and view stored data.
+                save or load projects from local storage and view stored data.
               </li>
             </ul>
             <div className="mt-6 text-sm text-gray-500">
@@ -539,6 +770,7 @@ int main() {
           <button>Close</button>
         </form>
       </dialog>
+
       <dialog id="debug_modal" className="modal">
         <div className="modal-box">
           <h2 className="font-bold text-lg">
@@ -556,12 +788,72 @@ int main() {
             </div>
             <div className="mt-4">
               <h3 className="font-bold text-lg">LocalStorage Content:</h3>
-              {localStorage.getItem("myFiles") || "No data in localStorage."}
+              <pre className="text-xs bg-base-200 p-2 rounded mt-2 overflow-auto max-h-40">
+                {localStorage.getItem("myProjects") ||
+                  "No data in localStorage."}
+              </pre>
             </div>
           </div>
         </div>
         <form method="dialog" className="modal-backdrop">
           <button>Close</button>
+        </form>
+      </dialog>
+
+      <dialog id="new_project_modal" className="modal">
+        <div className="modal-box max-w-4xl">
+          <h2 className="font-bold text-2xl mb-6">
+            <FaFolderPlus className="inline-block mr-2" size={24} />
+            Create New Project
+          </h2>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {projectTemplates.map((template, idx) => (
+              <div
+                key={idx}
+                className="card bg-base-200 shadow-md hover:shadow-lg transition-shadow"
+              >
+                <div className="card-body">
+                  <h3 className="card-title text-lg">{template.name}</h3>
+                  <p className="text-sm text-gray-600 mb-4">
+                    {template.description}
+                  </p>
+
+                  <div className="mb-4">
+                    <h4 className="font-semibold text-sm mb-2">
+                      Files included:
+                    </h4>
+                    <ul className="text-xs space-y-1">
+                      {template.files.map((file, fileIdx) => (
+                        <li key={fileIdx} className="flex items-center">
+                          <span className="w-2 h-2 bg-primary rounded-full mr-2"></span>
+                          {file.name}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  <div className="card-actions justify-end">
+                    <button
+                      className="btn btn-primary btn-sm"
+                      onClick={() => createProjectFromTemplate(template)}
+                    >
+                      Create Project
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="modal-action">
+            <form method="dialog">
+              <button className="btn">Cancel</button>
+            </form>
+          </div>
+        </div>
+        <form method="dialog" className="modal-backdrop">
+          <button>close</button>
         </form>
       </dialog>
     </div>
