@@ -17,8 +17,15 @@ import {
   FaBug,
   FaFolder,
   FaFolderPlus,
+  FaMoon,
+  FaSun,
+  FaSearchPlus,
+  FaSearchMinus,
+  FaAlignLeft,
+  FaSearch,
+  FaListOl,
+  FaExpandArrowsAlt,
 } from "react-icons/fa";
-import cKeywords from "./cKeywords.json";
 import ASTViewer from "./ASTViewer";
 import JSZip from "jszip";
 
@@ -42,9 +49,37 @@ int main() {
     markers: [[]],
   });
 
-  const [projects, setProjects] = useState([createDefaultProject()]);
+  // 初始化时先检查 localStorage
+  const initializeProjects = () => {
+    const storedProjects = localStorage.getItem("myProjects");
+    if (storedProjects) {
+      try {
+        const parsedProjects = JSON.parse(storedProjects);
+        // 验证数据结构的完整性
+        if (Array.isArray(parsedProjects) && parsedProjects.length > 0) {
+          return parsedProjects.map((project) => ({
+            ...project,
+            files: project.files || [],
+            warnings: project.warnings || [],
+            markers: project.markers || [],
+            activeIndex: project.activeIndex || 0,
+          }));
+        }
+      } catch (error) {
+        console.error("Error parsing localStorage data:", error);
+      }
+    }
+    return [createDefaultProject()];
+  };
+
+  const [projects, setProjects] = useState(initializeProjects);
   const [activeProjectIndex, setActiveProjectIndex] = useState(0);
   const [astData, setAstData] = useState(null);
+  const [editorTheme, setEditorTheme] = useState("vs-dark");
+  const [fontSize, setFontSize] = useState(24);
+  const [showLineNumbers, setShowLineNumbers] = useState(true);
+  const [wordWrap, setWordWrap] = useState(true);
+  const [recentFiles, setRecentFiles] = useState([]);
   const editorRef = useRef(null);
 
   // Ensure we always have valid data
@@ -75,8 +110,10 @@ int main() {
     }
   };
 
-  const setActiveIndex = (newIndex) =>
+  const setActiveIndex = (newIndex) => {
     updateCurrentProject({ activeIndex: newIndex });
+    updateRecentFiles(newIndex);
+  };
 
   const setWarnings = (newWarnings) => {
     if (typeof newWarnings === "function") {
@@ -115,7 +152,8 @@ int main() {
   }, [activeIndex]);
 
   useEffect(() => {
-    handleLoad();
+    // 移除这个 useEffect，因为我们已经在 useState 中初始化了
+    // handleLoad();
   }, []);
 
   useEffect(() => {
@@ -126,12 +164,45 @@ int main() {
 
   const handleEditorMount = (editor, monaco) => {
     editorRef.current = editor;
-    // 使用 JSON 檔案的關鍵字，並去除重複
-    const keywords = Array.from(new Set(cKeywords));
+    // C 語言的函數和常見類型
+    const cFunctions = [
+      "printf",
+      "scanf",
+      "malloc",
+      "free",
+      "strlen",
+      "strcpy",
+      "strcmp",
+      "strcat",
+      "fopen",
+      "fclose",
+      "fread",
+      "fwrite",
+      "getchar",
+      "putchar",
+    ];
+
+    const cTypes = [
+      "int",
+      "char",
+      "float",
+      "double",
+      "void",
+      "long",
+      "short",
+      "unsigned",
+      "signed",
+      "const",
+      "static",
+      "extern",
+      "register",
+      "volatile",
+    ];
+
     // 避免重複註冊 provider
     if (!cCompletionRegistered) {
       monaco.languages.registerCompletionItemProvider("c", {
-        triggerCharacters: ["."],
+        triggerCharacters: [".", "#", "<", '"'],
         provideCompletionItems: (model, position) => {
           const word = model.getWordUntilPosition(position);
           const range = {
@@ -140,18 +211,168 @@ int main() {
             startColumn: word.startColumn,
             endColumn: word.endColumn,
           };
-          return {
-            suggestions: keywords.map((kw) => ({
-              label: kw,
-              kind: monaco.languages.CompletionItemKind.Keyword,
-              insertText: kw,
+
+          // Common C code snippets and constructs
+          const cSnippets = [
+            {
+              label: "for",
+              kind: monaco.languages.CompletionItemKind.Snippet,
+              insertText:
+                "for (int ${1:i} = 0; ${1:i} < ${2:n}; ${1:i}++) {\n\t${3:// code}\n}",
+              insertTextRules:
+                monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
               range,
+              detail: "for loop",
+              documentation: "Standard for loop with iterator",
+            },
+            {
+              label: "while",
+              kind: monaco.languages.CompletionItemKind.Snippet,
+              insertText: "while (${1:condition}) {\n\t${2:// code}\n}",
+              insertTextRules:
+                monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+              range,
+              detail: "while loop",
+              documentation: "While loop with condition",
+            },
+            {
+              label: "do-while",
+              kind: monaco.languages.CompletionItemKind.Snippet,
+              insertText: "do {\n\t${1:// code}\n} while (${2:condition});",
+              insertTextRules:
+                monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+              range,
+              detail: "do-while loop",
+              documentation: "Do-while loop",
+            },
+            {
+              label: "if",
+              kind: monaco.languages.CompletionItemKind.Snippet,
+              insertText: "if (${1:condition}) {\n\t${2:// code}\n}",
+              insertTextRules:
+                monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+              range,
+              detail: "if statement",
+              documentation: "If conditional statement",
+            },
+            {
+              label: "if-else",
+              kind: monaco.languages.CompletionItemKind.Snippet,
+              insertText:
+                "if (${1:condition}) {\n\t${2:// if code}\n} else {\n\t${3:// else code}\n}",
+              insertTextRules:
+                monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+              range,
+              detail: "if-else statement",
+              documentation: "If-else conditional statement",
+            },
+            {
+              label: "switch",
+              kind: monaco.languages.CompletionItemKind.Snippet,
+              insertText:
+                "switch (${1:variable}) {\n\tcase ${2:value1}:\n\t\t${3:// code}\n\t\tbreak;\n\tcase ${4:value2}:\n\t\t${5:// code}\n\t\tbreak;\n\tdefault:\n\t\t${6:// default code}\n\t\tbreak;\n}",
+              insertTextRules:
+                monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+              range,
+              detail: "switch statement",
+              documentation: "Switch-case statement",
+            },
+            {
+              label: "function",
+              kind: monaco.languages.CompletionItemKind.Snippet,
+              insertText:
+                "${1:int} ${2:functionName}(${3:parameters}) {\n\t${4:// code}\n\treturn ${5:value};\n}",
+              insertTextRules:
+                monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+              range,
+              detail: "function definition",
+              documentation: "Function definition template",
+            },
+            {
+              label: "main",
+              kind: monaco.languages.CompletionItemKind.Snippet,
+              insertText: "int main() {\n\t${1:// code}\n\treturn 0;\n}",
+              insertTextRules:
+                monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+              range,
+              detail: "main function",
+              documentation: "Main function template",
+            },
+            {
+              label: "printf",
+              kind: monaco.languages.CompletionItemKind.Snippet,
+              insertText: 'printf("${1:format}", ${2:args});',
+              insertTextRules:
+                monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+              range,
+              detail: "printf statement",
+              documentation: "Printf function call",
+            },
+            {
+              label: "scanf",
+              kind: monaco.languages.CompletionItemKind.Snippet,
+              insertText: 'scanf("${1:format}", ${2:&variable});',
+              insertTextRules:
+                monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+              range,
+              detail: "scanf statement",
+              documentation: "Scanf function call",
+            },
+            {
+              label: "include",
+              kind: monaco.languages.CompletionItemKind.Snippet,
+              insertText: "#include <${1:header}>",
+              insertTextRules:
+                monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+              range,
+              detail: "include directive",
+              documentation: "Include header file",
+            },
+            {
+              label: "struct",
+              kind: monaco.languages.CompletionItemKind.Snippet,
+              insertText:
+                "typedef struct {\n\t${1:// members}\n} ${2:StructName};",
+              insertTextRules:
+                monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+              range,
+              detail: "struct definition",
+              documentation: "Structure definition template",
+            },
+          ];
+
+          const suggestions = [
+            ...cFunctions.map((fn) => ({
+              label: fn,
+              kind: monaco.languages.CompletionItemKind.Function,
+              insertText: fn,
+              range,
+              detail: "C standard function",
             })),
-          };
+            ...cTypes.map((type) => ({
+              label: type,
+              kind: monaco.languages.CompletionItemKind.TypeParameter,
+              insertText: type,
+              range,
+              detail: "C data type",
+            })),
+            ...cSnippets,
+          ];
+
+          return { suggestions };
         },
       });
       cCompletionRegistered = true;
     }
+
+    // 啟用快捷鍵
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyF, () => {
+      editor.getAction("actions.find").run();
+    });
+
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyH, () => {
+      editor.getAction("editor.action.startFindReplaceAction").run();
+    });
   };
 
   const handleFileUpload = (e) => {
@@ -385,11 +606,27 @@ int main() {
   const handleLoad = () => {
     const storedProjects = localStorage.getItem("myProjects");
     if (storedProjects) {
-      setProjects(JSON.parse(storedProjects));
-    } else {
-      setProjects([createDefaultProject()]);
+      try {
+        const parsedProjects = JSON.parse(storedProjects);
+        if (Array.isArray(parsedProjects) && parsedProjects.length > 0) {
+          const validatedProjects = parsedProjects.map((project) => ({
+            ...project,
+            files: project.files || [],
+            warnings: project.warnings || [],
+            markers: project.markers || [],
+            activeIndex: project.activeIndex || 0,
+          }));
+          setProjects(validatedProjects);
+          console.log("Loaded from localStorage");
+          return;
+        }
+      } catch (error) {
+        console.error("Error parsing localStorage data:", error);
+      }
     }
-    console.log("Loaded from localStorage");
+    // 只有在没有有效 localStorage 数据时才创建默认项目
+    setProjects([createDefaultProject()]);
+    console.log("Created default project");
   };
 
   const handleSave = () => {
@@ -491,6 +728,78 @@ int main() {
     }
   };
 
+  const toggleTheme = () => {
+    setEditorTheme((prev) => {
+      const newTheme = prev === "vs-dark" ? "light" : "vs-dark";
+      // 立即更新 Monaco Editor 的主題
+      if (editorRef.current && window.monaco) {
+        window.monaco.editor.setTheme(newTheme);
+      }
+      return newTheme;
+    });
+  };
+
+  const adjustFontSize = (delta) => {
+    setFontSize((prev) => {
+      const newSize = Math.max(12, Math.min(32, prev + delta));
+      // 立即更新 Monaco Editor 的字體大小
+      if (editorRef.current) {
+        editorRef.current.updateOptions({
+          fontSize: newSize,
+        });
+      }
+      return newSize;
+    });
+  };
+
+  const toggleLineNumbers = () => {
+    setShowLineNumbers((prev) => {
+      const newValue = !prev;
+      // 立即更新 Monaco Editor 的選項
+      if (editorRef.current) {
+        editorRef.current.updateOptions({
+          lineNumbers: newValue ? "on" : "off",
+        });
+      }
+      return newValue;
+    });
+  };
+
+  const toggleWordWrap = () => {
+    setWordWrap((prev) => {
+      const newValue = !prev;
+      // 立即更新 Monaco Editor 的選項
+      if (editorRef.current) {
+        editorRef.current.updateOptions({
+          wordWrap: newValue ? "on" : "off",
+        });
+      }
+      return newValue;
+    });
+  };
+
+  const formatCode = () => {
+    if (editorRef.current) {
+      editorRef.current.getAction("editor.action.formatDocument").run();
+    }
+  };
+
+  const openFindReplace = () => {
+    if (editorRef.current) {
+      editorRef.current.getAction("editor.action.startFindReplaceAction").run();
+    }
+  };
+
+  const updateRecentFiles = (fileIndex) => {
+    const fileName = files[fileIndex]?.name;
+    if (!fileName) return;
+
+    setRecentFiles((prev) => {
+      const filtered = prev.filter((name) => name !== fileName);
+      return [fileName, ...filtered].slice(0, 3);
+    });
+  };
+
   // 切換檔案時，設置對應的 markers
   useEffect(() => {
     if (editorRef.current && markers[activeIndex]) {
@@ -509,6 +818,83 @@ int main() {
     <div className="h-screen flex flex-col">
       <header className="navbar bg-base-100 p-4 shadow">
         <a className="btn btn-ghost text-xl">Simple C Editor</a>
+
+        {/* Editor Controls */}
+        <div className="flex items-center gap-2 ml-4">
+          <div className="tooltip tooltip-bottom" data-tip="Toggle Theme">
+            <button className="btn btn-sm btn-ghost" onClick={toggleTheme}>
+              {editorTheme === "vs-dark" ? (
+                <FaSun size={16} />
+              ) : (
+                <FaMoon size={16} />
+              )}
+            </button>
+          </div>
+
+          <div className="flex items-center gap-1">
+            <div
+              className="tooltip tooltip-bottom"
+              data-tip="Decrease Font Size"
+            >
+              <button
+                className="btn btn-sm btn-ghost"
+                onClick={() => adjustFontSize(-2)}
+              >
+                <FaSearchMinus size={14} />
+              </button>
+            </div>
+            <span className="text-sm px-2">{fontSize}px</span>
+            <div
+              className="tooltip tooltip-bottom"
+              data-tip="Increase Font Size"
+            >
+              <button
+                className="btn btn-sm btn-ghost"
+                onClick={() => adjustFontSize(2)}
+              >
+                <FaSearchPlus size={14} />
+              </button>
+            </div>
+          </div>
+
+          <div className="tooltip tooltip-bottom" data-tip="Format Code">
+            <button className="btn btn-sm btn-ghost" onClick={formatCode}>
+              <FaAlignLeft size={16} />
+            </button>
+          </div>
+
+          <div
+            className="tooltip tooltip-bottom"
+            data-tip="Find & Replace (Ctrl+H)"
+          >
+            <button className="btn btn-sm btn-ghost" onClick={openFindReplace}>
+              <FaSearch size={16} />
+            </button>
+          </div>
+
+          <div
+            className="tooltip tooltip-bottom"
+            data-tip="Toggle Line Numbers"
+          >
+            <button
+              className={`btn btn-sm ${
+                showLineNumbers ? "btn-primary" : "btn-ghost"
+              }`}
+              onClick={toggleLineNumbers}
+            >
+              <FaListOl size={16} />
+            </button>
+          </div>
+
+          <div className="tooltip tooltip-bottom" data-tip="Toggle Word Wrap">
+            <button
+              className={`btn btn-sm ${wordWrap ? "btn-primary" : "btn-ghost"}`}
+              onClick={toggleWordWrap}
+            >
+              <FaExpandArrowsAlt size={16} />
+            </button>
+          </div>
+        </div>
 
         {/* Project Switcher */}
         <div className="flex items-center ml-auto gap-4">
@@ -575,13 +961,22 @@ int main() {
             height="100%"
             language="c"
             value={files[activeIndex]?.content || ""}
-            theme="vs-dark"
+            theme={editorTheme}
             onMount={handleEditorMount}
             onChange={(value) => updateContent(value || "")}
             options={{
-              fontSize: 24,
+              fontSize: fontSize,
               minimap: { enabled: false },
-              wordWrap: "on",
+              wordWrap: wordWrap ? "on" : "off",
+              lineNumbers: showLineNumbers ? "on" : "off",
+              folding: true,
+              bracketMatching: "always",
+              autoIndent: "full",
+              formatOnPaste: true,
+              formatOnType: true,
+              suggestOnTriggerCharacters: true,
+              quickSuggestions: true,
+              scrollBeyondLastLine: false,
             }}
           />
         </div>
@@ -617,6 +1012,23 @@ int main() {
                 Download Project
               </button>
             </div>
+
+            {/* Recent Files */}
+            {recentFiles.length > 0 && (
+              <div className="mb-4">
+                <h4 className="text-sm font-semibold mb-2 text-gray-600">
+                  Recently Edited:
+                </h4>
+                <div className="flex gap-2 flex-wrap">
+                  {recentFiles.map((fileName, idx) => (
+                    <span key={idx} className="badge badge-primary badge-sm">
+                      {fileName}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="space-y-2 mb-4">
               {files.map((file, idx) => (
                 <div key={idx} className="flex items-center gap-2">
@@ -634,6 +1046,9 @@ int main() {
                       }`}
                     >
                       {file.name}
+                      {recentFiles.includes(file.name) && (
+                        <span className="ml-2 text-xs opacity-75">●</span>
+                      )}
                     </span>
                     {file.warningsCount === 0 && (
                       <span className="ml-2 badge badge-soft badge-success">
@@ -715,6 +1130,7 @@ int main() {
           </div>
         </div>
       </div>
+
       <dialog id="my_modal" className="modal">
         <div className="modal-box max-w-2xl">
           <h2 className="font-bold text-2xl mb-4">
@@ -739,6 +1155,19 @@ int main() {
                 markers.
               </li>
               <li>
+                <strong>Editor Customization:</strong> Toggle between light/dark
+                themes, adjust font size, toggle line numbers and word wrap,
+                format code, and use find & replace (Ctrl+F, Ctrl+H).
+              </li>
+              <li>
+                <strong>Enhanced Autocomplete:</strong> Context-aware
+                suggestions for C keywords, standard functions, and data types.
+              </li>
+              <li>
+                <strong>Recent Files:</strong> Track recently edited files for
+                quick access.
+              </li>
+              <li>
                 <strong>Syntax Checking:</strong> Automatically detect and
                 display syntax errors and warnings for each file.
               </li>
@@ -749,7 +1178,8 @@ int main() {
               <li>
                 <strong>Keyboard Shortcuts:</strong> Use <strong>Ctrl+S</strong>{" "}
                 (or <strong>Cmd+S</strong> on Mac) to quickly download the
-                current file.
+                current file. <strong>Ctrl+F</strong> for find,{" "}
+                <strong>Ctrl+H</strong> for find & replace.
               </li>
               <li>
                 <strong>Local Storage:</strong> Automatically save and load your
