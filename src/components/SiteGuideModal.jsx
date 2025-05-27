@@ -290,8 +290,8 @@ const SiteGuideModal = ({ activeGuideTab, setActiveGuideTab }) => {
                             real-time analysis
                           </li>
                           <li>
-                            <strong>Code Formatting:</strong> Auto-indent and
-                            manual formatting
+                            <strong>Go to Line:</strong> Quick navigation to any
+                            line number
                           </li>
                         </ul>
                       </div>
@@ -483,6 +483,12 @@ const SiteGuideModal = ({ activeGuideTab, setActiveGuideTab }) => {
                             <kbd className="kbd kbd-sm">H</kbd>
                           </div>
                         </div>
+                        <div className="flex justify-between items-center">
+                          <span>Go to Line</span>
+                          <div className="space-x-1">
+                            <kbd className="kbd kbd-sm">Enter</kbd>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -525,6 +531,10 @@ const SiteGuideModal = ({ activeGuideTab, setActiveGuideTab }) => {
                       Use <kbd className="kbd kbd-xs">Ctrl</kbd>+
                       <kbd className="kbd kbd-xs">S</kbd> frequently to backup
                       important files
+                    </li>
+                    <li>
+                      Enter line number in the Go to Line field and press{" "}
+                      <kbd className="kbd kbd-xs">Enter</kbd> to navigate
                     </li>
                     <li>The AST viewer updates in real-time as you type</li>
                     <li>Right-click in the editor for context menu options</li>

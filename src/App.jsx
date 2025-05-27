@@ -21,10 +21,10 @@ import {
   FaSun,
   FaSearchPlus,
   FaSearchMinus,
-  FaAlignLeft,
   FaSearch,
   FaListOl,
   FaExpandArrowsAlt,
+  FaArrowRight,
 } from "react-icons/fa";
 import ASTViewer from "./components/ASTViewer";
 import JSZip from "jszip";
@@ -78,6 +78,7 @@ function App() {
   const [wordWrap, setWordWrap] = useState(true);
   const [recentFiles, setRecentFiles] = useState([]);
   const [activeGuideTab, setActiveGuideTab] = useState("overview");
+  const [goToLineNumber, setGoToLineNumber] = useState("");
   const editorRef = useRef(null);
 
   // Ensure we always have valid data
@@ -567,15 +568,33 @@ function App() {
     });
   };
 
-  const formatCode = () => {
-    if (editorRef.current) {
-      editorRef.current.getAction("editor.action.formatDocument").run();
+  const goToLine = () => {
+    if (editorRef.current && goToLineNumber) {
+      const lineNum = parseInt(goToLineNumber);
+      if (!isNaN(lineNum)) {
+        const model = editorRef.current.getModel();
+        if (model) {
+          // Automatically clamp to valid range instead of showing alert
+          const maxLines = model.getLineCount();
+          const targetLine = Math.max(1, Math.min(maxLines, lineNum));
+
+          editorRef.current.setPosition({ lineNumber: targetLine, column: 1 });
+          editorRef.current.revealLineInCenter(targetLine);
+          editorRef.current.focus();
+          setGoToLineNumber(""); // Clear input after navigation
+        }
+      }
     }
   };
-
   const openFindReplace = () => {
     if (editorRef.current) {
       editorRef.current.getAction("editor.action.startFindReplaceAction").run();
+    }
+  };
+
+  const handleGoToLineKeyPress = (e) => {
+    if (e.key === "Enter") {
+      goToLine();
     }
   };
 
@@ -646,9 +665,24 @@ function App() {
             </div>
           </div>
 
-          <div className="tooltip tooltip-bottom" data-tip="Format Code">
-            <button className="btn btn-sm btn-ghost" onClick={formatCode}>
-              <FaAlignLeft size={16} />
+          <div className="flex items-center gap-1">
+            <div className="tooltip tooltip-bottom" data-tip="Go to Line">
+              <input
+                type="number"
+                placeholder="Line #"
+                className="input input-sm w-20 text-center"
+                value={goToLineNumber}
+                onChange={(e) => setGoToLineNumber(e.target.value)}
+                onKeyPress={handleGoToLineKeyPress}
+                min="1"
+              />
+            </div>
+            <button
+              className="btn btn-sm btn-ghost"
+              onClick={goToLine}
+              disabled={!goToLineNumber}
+            >
+              <FaArrowRight size={16} />
             </button>
           </div>
 
